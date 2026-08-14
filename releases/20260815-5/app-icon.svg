@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Circle Planner">
+  <rect width="512" height="512" rx="112" fill="#0d1117"/>
+  <circle cx="256" cy="256" r="174" fill="#171d25" stroke="#d5d9e2" stroke-width="16"/>
+  <path d="M256 92A164 164 0 0 1 398 338L256 256Z" fill="#4aa8d8" stroke="#0d1117" stroke-width="8"/>
+  <path d="M398 338A164 164 0 0 1 114 338L256 256Z" fill="#5bae74" stroke="#0d1117" stroke-width="8"/>
+  <path d="M114 338A164 164 0 0 1 256 92L256 256Z" fill="#a886d9" stroke="#0d1117" stroke-width="8"/>
+  <circle cx="256" cy="256" r="62" fill="#111820" stroke="#d5d9e2" stroke-width="10"/>
+  <path d="M256 76V118" stroke="#f0c75e" stroke-width="16" stroke-linecap="round"/>
+</svg>

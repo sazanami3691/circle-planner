@@ -9,7 +9,7 @@ import {
   NtfySyncManager,
   classifyNotificationTiming,
   createEventNotificationPayload,
-  createNtfyJsonPublishUrl,
+  createNtfyGetPublishUrl,
   createSequenceId,
   createTestNotificationPayload,
   defaultNtfyIntegration,
@@ -65,11 +65,12 @@ function createFetchMock() {
   const diagnostics = [];
   const behavior = { failPost: false, failGet: false, postStatus: 200, getStatus: 200 };
   const fetchImpl = async (url, init) => {
+    const method = init.method || "GET";
     calls.push({ url, init, payload: init.body ? JSON.parse(init.body) : null });
-    if ((init.method === "POST" && behavior.failPost) || (init.method === "GET" && behavior.failGet)) {
+    if ((method === "POST" && behavior.failPost) || (method === "GET" && behavior.failGet)) {
       throw new TypeError("Failed to fetch");
     }
-    const status = init.method === "POST" ? behavior.postStatus : behavior.getStatus;
+    const status = method === "POST" ? behavior.postStatus : behavior.getStatus;
     return { ok: status >= 200 && status < 300, status };
   };
   return { calls, behavior, diagnostics, fetchImpl };
@@ -107,7 +108,7 @@ test("ntfy OFFまたはtopic未設定では予定同期の通信を行わない"
   }
 });
 
-test("テスト通知は指定topicへ日本語payloadを即時送信する", async () => {
+test("テスト通知はtopic・日本語title・日本語messageをURLエンコードしてGET送信する", async () => {
   const payload = createTestNotificationPayload("circle-planner-test-topic");
   assert.deepEqual(payload, {
     topic: "circle-planner-test-topic",
@@ -115,38 +116,59 @@ test("テスト通知は指定topicへ日本語payloadを即時送信する", as
     message: "Circle Plannerからのテスト通知です",
   });
 
+  const encodedTopicUrl = createNtfyGetPublishUrl("https://ntfy.sh", {
+    topic: "topic/with space",
+    title: "予定通知",
+    message: "日本語本文",
+  });
+  assert.match(encodedTopicUrl, /\/topic%2Fwith%20space\/publish\?/);
+  assert.match(encodedTopicUrl, /title=%E4%BA%88%E5%AE%9A%E9%80%9A%E7%9F%A5/);
+  assert.match(encodedTopicUrl, /message=%E6%97%A5%E6%9C%AC%E8%AA%9E%E6%9C%AC%E6%96%87/);
+
+  const { repository } = createRepository();
+  repository.setIntegration("ntfy", configuredSettings());
   const mock = createFetchMock();
-  const client = createTestClient(mock);
-  await client.publish("https://ntfy.sh", payload);
-  assert.equal(createNtfyJsonPublishUrl("https://ntfy.sh/"), "https://ntfy.sh/");
-  assert.equal(mock.calls[0].url, "https://ntfy.sh/");
-  assert.equal(mock.calls[0].init.method, "POST");
+  const manager = new NtfySyncManager({
+    repository,
+    client: createTestClient(mock),
+    now: fixedNow,
+  });
+  await manager.sendTestNotification();
+
+  const requestUrl = new URL(mock.calls[0].url);
+  assert.equal(requestUrl.origin, "https://ntfy.sh");
+  assert.equal(requestUrl.pathname, "/circle-planner-test-topic/publish");
+  assert.equal(requestUrl.searchParams.get("title"), "Circle Planner");
+  assert.equal(requestUrl.searchParams.get("message"), "Circle Plannerからのテスト通知です");
+  assert.match(mock.calls[0].url, /title=Circle\+Planner/);
+  assert.match(mock.calls[0].url, /message=Circle\+Planner%E3%81%8B%E3%82%89/);
+  assert.equal(Object.hasOwn(mock.calls[0].init, "method"), false);
   assert.equal(Object.hasOwn(mock.calls[0].init, "headers"), false);
   assert.equal(Object.hasOwn(mock.calls[0].init, "cache"), false);
   assert.equal(Object.hasOwn(mock.calls[0].init, "credentials"), false);
-  assert.equal(mock.calls[0].init.body, JSON.stringify(payload));
-  assert.deepEqual(mock.calls[0].payload, payload);
+  assert.equal(Object.hasOwn(mock.calls[0].init, "body"), false);
+  assert.equal(mock.calls[0].payload, null);
 });
 
-test("ntfy通信エラーは秘密情報を診断へ含めずnetwork・4xx・5xx・timeoutを区別する", async () => {
+test("GETテスト通知の通信エラーは秘密情報を診断へ含めずnetwork・4xx・5xx・timeoutを区別する", async () => {
   const sensitivePayload = createTestNotificationPayload("secret-topic");
 
   const networkMock = createFetchMock();
-  networkMock.behavior.failPost = true;
+  networkMock.behavior.failGet = true;
   await assert.rejects(
-    createTestClient(networkMock).publish("https://ntfy.sh", sensitivePayload),
+    createTestClient(networkMock).publishTest("https://ntfy.sh", sensitivePayload),
     (error) => error instanceof NtfyRequestError && error.kind === "network" && error.status === null,
   );
-  assert.deepEqual(networkMock.diagnostics, [{ kind: "network", method: "POST", status: null }]);
+  assert.deepEqual(networkMock.diagnostics, [{ kind: "network", method: "GET", status: null }]);
 
   for (const [status, kind] of [[400, "http-client"], [503, "http-server"]]) {
     const httpMock = createFetchMock();
-    httpMock.behavior.postStatus = status;
+    httpMock.behavior.getStatus = status;
     await assert.rejects(
-      createTestClient(httpMock).publish("https://ntfy.sh", sensitivePayload),
+      createTestClient(httpMock).publishTest("https://ntfy.sh", sensitivePayload),
       (error) => error instanceof NtfyRequestError && error.kind === kind && error.status === status,
     );
-    assert.deepEqual(httpMock.diagnostics, [{ kind, method: "POST", status }]);
+    assert.deepEqual(httpMock.diagnostics, [{ kind, method: "GET", status }]);
   }
 
   const timeoutDiagnostics = [];
@@ -162,10 +184,10 @@ test("ntfy通信エラーは秘密情報を診断へ含めずnetwork・4xx・5xx
     }),
   });
   await assert.rejects(
-    timeoutClient.publish("https://ntfy.sh", sensitivePayload),
+    timeoutClient.publishTest("https://ntfy.sh", sensitivePayload),
     (error) => error instanceof NtfyRequestError && error.kind === "timeout",
   );
-  assert.deepEqual(timeoutDiagnostics, [{ kind: "timeout", method: "POST", status: null }]);
+  assert.deepEqual(timeoutDiagnostics, [{ kind: "timeout", method: "GET", status: null }]);
 
   const serializedDiagnostics = JSON.stringify([
     ...networkMock.diagnostics,
@@ -236,7 +258,9 @@ test("同一予定の再同期は増殖せず編集は同じSequence IDで置換
   assert.equal(publishes[0].payload.sequence_id, publishes[1].payload.sequence_id);
   assert.equal(publishes[1].payload.message, "ゲーム制作・編集\n20:00〜20:13");
   assert.ok(publishes.every((call) => call.url === "https://ntfy.sh/"));
+  assert.ok(publishes.every((call) => call.init.method === "POST"));
   assert.ok(publishes.every((call) => !Object.hasOwn(call.init, "headers")));
+  assert.ok(publishes.every((call) => call.init.body === JSON.stringify(call.payload)));
 });
 
 test("予約済み予定を3日より先へ編集すると旧予約をキャンセルして待機へ戻す", async () => {
