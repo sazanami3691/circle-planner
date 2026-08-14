@@ -18,6 +18,7 @@ const releaseFiles = [
   ["js/app.js", "app.js"],
   ["js/core.js", "core.js"],
   ["js/storage.js", "storage.js"],
+  ["js/ntfy.js", "ntfy.js"],
   ["icons/app-icon.svg", "app-icon.svg"],
   ["icons/apple-touch-icon.png", "apple-touch-icon.png"],
   ["icons/icon-192.png", "icon-192.png"],

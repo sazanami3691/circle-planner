@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ja" data-app-release="20260815-2">
+<html lang="ja" data-app-release="20260815-3">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -11,10 +11,10 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Circle Planner" />
-    <link rel="manifest" href="manifest.20260815-2.webmanifest" />
-    <link rel="icon" href="releases/20260815-2/app-icon.svg" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="releases/20260815-2/apple-touch-icon.png" />
-    <link rel="stylesheet" href="releases/20260815-2/styles.css" />
+    <link rel="manifest" href="manifest.20260815-3.webmanifest" />
+    <link rel="icon" href="releases/20260815-3/app-icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="releases/20260815-3/apple-touch-icon.png" />
+    <link rel="stylesheet" href="releases/20260815-3/styles.css" />
     <title>Circle Planner</title>
   </head>
   <body>
@@ -75,6 +75,13 @@
         </div>
 
         <nav class="menu-navigation" aria-label="アプリメニュー">
+          <button class="menu-action" id="open-notification-settings" type="button">
+            <span class="menu-action__bell" aria-hidden="true"></span>
+            <span>
+              <strong>通知設定</strong>
+              <small>ntfyへの通知予約を管理</small>
+            </span>
+          </button>
           <button class="menu-action" id="update-app" type="button">
             <span class="menu-action__icon" aria-hidden="true"></span>
             <span>
@@ -251,10 +258,84 @@
       </form>
     </dialog>
 
+    <dialog id="ntfy-dialog" class="event-dialog settings-dialog" aria-labelledby="ntfy-title">
+      <form id="ntfy-form" class="event-form" novalidate>
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow">NOTIFICATIONS</p>
+            <h2 id="ntfy-title">ntfy通知設定</h2>
+          </div>
+          <button class="icon-button" id="close-ntfy-dialog" type="button" aria-label="閉じる">×</button>
+        </div>
+
+        <label class="notification-toggle">
+          <span>
+            <strong>ntfy通知</strong>
+            <small>予定開始時刻に通知</small>
+          </span>
+          <input id="ntfy-enabled" name="enabled" type="checkbox" role="switch" />
+        </label>
+
+        <label class="field field--full">
+          <span>ntfyサーバーURL</span>
+          <input
+            id="ntfy-server-url"
+            name="serverUrl"
+            type="url"
+            value="https://ntfy.sh"
+            inputmode="url"
+            autocomplete="url"
+            required
+          />
+        </label>
+
+        <label class="field field--full">
+          <span>トピック名</span>
+          <input
+            id="ntfy-topic"
+            name="topic"
+            type="text"
+            maxlength="64"
+            pattern="[-_A-Za-z0-9]+"
+            autocapitalize="none"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="iPadのntfyアプリで購読しているトピック"
+          />
+        </label>
+
+        <p class="settings-help">
+          トピック名はこの端末のLocalStorageだけに保存され、ソースコードには含まれません。推測されにくい名前を使用してください。
+        </p>
+
+        <div class="notification-status" id="ntfy-status" role="status" aria-live="polite">
+          通知状態を確認しています。
+        </div>
+
+        <p class="settings-help settings-help--limit">
+          ntfyの予約通知には予約可能期間があります。遠い予定は、通知可能期間に入ったあとCircle Plannerを開いた時点で自動予約されます。長期間アプリを開かない場合、その予定を予約できないことがあります。
+        </p>
+
+        <p class="form-error" id="ntfy-error" role="alert" hidden></p>
+
+        <div class="settings-actions">
+          <button class="button button--primary" id="save-ntfy-settings" type="submit">
+            設定を保存
+          </button>
+          <button class="button button--quiet" id="test-ntfy" type="button">
+            テスト通知を送る
+          </button>
+          <button class="button button--quiet" id="sync-ntfy" type="button">
+            通知予約を再確認
+          </button>
+        </div>
+      </form>
+    </dialog>
+
     <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
     <noscript>Circle Plannerを使用するにはJavaScriptを有効にしてください。</noscript>
-    <script src="releases/20260815-2/pwa-bootstrap.js" defer></script>
-    <script type="module" src="releases/20260815-2/app.js"></script>
+    <script src="releases/20260815-3/pwa-bootstrap.js" defer></script>
+    <script type="module" src="releases/20260815-3/app.js"></script>
   </body>
 </html>

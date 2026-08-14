@@ -1,5 +1,5 @@
 const CACHE_PREFIX = "circle-planner-shell-";
-const RELEASE_VERSION = "20260815-2";
+const RELEASE_VERSION = "20260815-3";
 const CACHE_NAME = `${CACHE_PREFIX}release-${RELEASE_VERSION}`;
 const CACHE_META_NAME = "circle-planner-cache-meta-v1";
 const ACTIVE_CACHE_KEY = new URL("./__active-shell-cache__", self.registration.scope).href;
@@ -11,6 +11,7 @@ const APP_SHELL = [
   `./releases/${RELEASE_VERSION}/app.js`,
   `./releases/${RELEASE_VERSION}/core.js`,
   `./releases/${RELEASE_VERSION}/storage.js`,
+  `./releases/${RELEASE_VERSION}/ntfy.js`,
   `./manifest.${RELEASE_VERSION}.webmanifest`,
   `./releases/${RELEASE_VERSION}/app-icon.svg`,
   `./releases/${RELEASE_VERSION}/apple-touch-icon.png`,
