@@ -329,10 +329,34 @@ input:focus-visible,
   stroke-width: 2;
 }
 
+.schedule-hit-area {
+  cursor: pointer;
+  pointer-events: stroke;
+  touch-action: manipulation;
+}
+
+@media (hover: hover) {
+  .schedule-hit-area:hover {
+    stroke: rgba(79, 157, 102, 0.1);
+  }
+}
+
 .schedule-guide {
   fill: none;
   stroke: #273440;
   stroke-width: 1;
+}
+
+.schedule-guide,
+.hour-tick,
+.hour-label,
+.event-label,
+.current-time-line,
+.current-time-dot,
+.center-disk,
+.center-count,
+.center-caption {
+  pointer-events: none;
 }
 
 .hour-tick {
@@ -423,6 +447,18 @@ input:focus-visible,
   display: inline-flex;
   align-items: center;
   gap: 7px;
+}
+
+.schedule-key__instruction {
+  color: #c3ccd6;
+}
+
+.key-ring {
+  display: inline-block;
+  width: 17px;
+  height: 17px;
+  border: 2px dashed #78ad87;
+  border-radius: 50%;
 }
 
 .key-line {

@@ -37,6 +37,32 @@ export function timeToMinutes(value) {
   return hours * 60 + minutes;
 }
 
+export function clockHourFromPoint(
+  x,
+  y,
+  { centerX = 300, centerY = 300, innerRadius = 78, outerRadius = 220 } = {},
+) {
+  const deltaX = x - centerX;
+  const deltaY = y - centerY;
+  const distance = Math.hypot(deltaX, deltaY);
+
+  if (distance < innerRadius || distance > outerRadius) return null;
+
+  const fullTurn = Math.PI * 2;
+  const clockwiseAngleFromTop = (Math.atan2(deltaY, deltaX) + Math.PI / 2 + fullTurn) % fullTurn;
+  return Math.floor((clockwiseAngleFromTop / fullTurn) * 24) % 24;
+}
+
+export function clockHourToTimeRange(hour) {
+  if (!Number.isInteger(hour) || hour < 0 || hour > 23) {
+    throw new RangeError(`Invalid clock hour: ${hour}`);
+  }
+
+  const startTime = `${String(hour).padStart(2, "0")}:00`;
+  const endTime = `${String((hour + 1) % 24).padStart(2, "0")}:00`;
+  return { startTime, endTime };
+}
+
 export function addDays(dateString, amount) {
   if (!isValidDate(dateString)) {
     throw new TypeError(`Invalid date: ${dateString}`);

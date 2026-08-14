@@ -66,13 +66,16 @@
             >
               <title id="schedule-title">24時間円形スケジュール</title>
               <desc id="schedule-description">
-                0時を上、6時を右、12時を下、18時を左として、予定を色付きの扇形で表示します。
+                0時を上、6時を右、12時を下、18時を左として、予定を色付きの扇形で表示します。空いている時間を選択すると予定を追加できます。
               </desc>
               <g id="schedule-layer"></g>
             </svg>
           </div>
 
           <div class="schedule-key" aria-label="円形スケジュールの見方">
+            <span class="schedule-key__instruction">
+              <i class="key-ring" aria-hidden="true"></i>空いている時間をタップして予定を追加
+            </span>
             <span><i class="key-line key-line--now" aria-hidden="true"></i>現在時刻</span>
             <span><i class="key-line key-line--event" aria-hidden="true"></i>予定（選択して編集）</span>
           </div>

@@ -1,4 +1,4 @@
-const CACHE_NAME = "circle-planner-shell-v1-20260813";
+const CACHE_NAME = "circle-planner-shell-v2-20260814";
 const APP_SHELL = [
   "./",
   "./index.html",

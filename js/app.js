@@ -2,6 +2,8 @@ import {
   MINUTES_PER_DAY,
   addDays,
   assignOverlapTracks,
+  clockHourFromPoint,
+  clockHourToTimeRange,
   eventDurationMinutes,
   formatDuration,
   getVisibleEventSegments,
@@ -13,6 +15,9 @@ import { ScheduleRepository, STORAGE_KEY } from "./storage.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const DEFAULT_COLOR = "#4aa8d8";
+const SCHEDULE_CENTER = 300;
+const SCHEDULE_TAP_INNER_RADIUS = 78;
+const SCHEDULE_TAP_OUTER_RADIUS = 220;
 const CATEGORY_COLORS = new Map([
   ["仕事", "#4aa8d8"],
   ["制作", "#a886d9"],
@@ -30,6 +35,7 @@ const elements = {
   nextDay: document.querySelector("#next-day"),
   selectedDate: document.querySelector("#selected-date"),
   dateRelative: document.querySelector("#date-relative"),
+  scheduleSvg: document.querySelector("#schedule-svg"),
   scheduleLayer: document.querySelector("#schedule-layer"),
   eventList: document.querySelector("#event-list"),
   eventCount: document.querySelector("#event-count"),
@@ -162,6 +168,48 @@ function appendScheduleBase(fragment) {
   );
 }
 
+function clientPointToSchedulePoint(event) {
+  const screenMatrix = elements.scheduleSvg.getScreenCTM();
+  if (!screenMatrix) return null;
+
+  const point = elements.scheduleSvg.createSVGPoint();
+  point.x = event.clientX;
+  point.y = event.clientY;
+  return point.matrixTransform(screenMatrix.inverse());
+}
+
+function handleScheduleTap(event) {
+  const point = clientPointToSchedulePoint(event);
+  if (!point) return;
+
+  const hour = clockHourFromPoint(point.x, point.y, {
+    centerX: SCHEDULE_CENTER,
+    centerY: SCHEDULE_CENTER,
+    innerRadius: SCHEDULE_TAP_INNER_RADIUS,
+    outerRadius: SCHEDULE_TAP_OUTER_RADIUS,
+  });
+  if (hour === null) return;
+
+  openNewDialog(clockHourToTimeRange(hour));
+}
+
+function appendScheduleTapArea(fragment) {
+  const radius = (SCHEDULE_TAP_INNER_RADIUS + SCHEDULE_TAP_OUTER_RADIUS) / 2;
+  const strokeWidth = SCHEDULE_TAP_OUTER_RADIUS - SCHEDULE_TAP_INNER_RADIUS;
+  const hitArea = createSvgElement("circle", {
+    cx: SCHEDULE_CENTER,
+    cy: SCHEDULE_CENTER,
+    r: radius,
+    fill: "none",
+    stroke: "transparent",
+    "stroke-width": strokeWidth,
+    class: "schedule-hit-area",
+    "aria-hidden": "true",
+  });
+  hitArea.addEventListener("click", handleScheduleTap);
+  fragment.append(hitArea);
+}
+
 function appendHourMarks(fragment) {
   for (let hour = 0; hour < 24; hour += 1) {
     const isMajor = hour % 6 === 0;
@@ -211,7 +259,10 @@ function appendEventSectors(fragment, assignedSegments) {
     const title = createSvgElement("title");
     title.textContent = `${segment.event.startTime}–${segment.event.endTime} ${segment.event.title}`;
     path.append(title);
-    path.addEventListener("click", () => openEditDialog(segment.event.id));
+    path.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openEditDialog(segment.event.id);
+    });
     path.addEventListener("keydown", (event) => {
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
@@ -283,6 +334,7 @@ function renderSchedule(segments) {
   const fragment = document.createDocumentFragment();
   const assigned = assignOverlapTracks(segments);
   appendScheduleBase(fragment);
+  appendScheduleTapArea(fragment);
   appendEventSectors(fragment, assigned);
   appendHourMarks(fragment);
   appendCurrentTime(fragment);
@@ -399,7 +451,7 @@ function updatePalette() {
   }
 }
 
-function openNewDialog() {
+function openNewDialog(initialTimeRange = null) {
   editingId = null;
   elements.form.reset();
   resetDialogState();
@@ -409,13 +461,18 @@ function openNewDialog() {
   elements.category.value = "その他";
   elements.color.value = DEFAULT_COLOR;
 
-  const now = new Date();
-  const startMinutes =
-    selectedDate === localDateString(now)
-      ? Math.min(1425, Math.ceil((now.getHours() * 60 + now.getMinutes()) / 15) * 15)
-      : 9 * 60;
-  elements.startTime.value = minutesToClock(startMinutes);
-  elements.endTime.value = minutesToClock(startMinutes + 60);
+  if (initialTimeRange) {
+    elements.startTime.value = initialTimeRange.startTime;
+    elements.endTime.value = initialTimeRange.endTime;
+  } else {
+    const now = new Date();
+    const startMinutes =
+      selectedDate === localDateString(now)
+        ? Math.min(1425, Math.ceil((now.getHours() * 60 + now.getMinutes()) / 15) * 15)
+        : 9 * 60;
+    elements.startTime.value = minutesToClock(startMinutes);
+    elements.endTime.value = minutesToClock(startMinutes + 60);
+  }
   updateOvernightHint();
   updatePalette();
   openDialog();
@@ -488,8 +545,8 @@ elements.form.addEventListener("submit", (submitEvent) => {
   saveEvent(event);
 });
 
-elements.addButton.addEventListener("click", openNewDialog);
-elements.emptyAddButton.addEventListener("click", openNewDialog);
+elements.addButton.addEventListener("click", () => openNewDialog());
+elements.emptyAddButton.addEventListener("click", () => openNewDialog());
 elements.previousDay.addEventListener("click", () => {
   selectedDate = addDays(selectedDate, -1);
   render();

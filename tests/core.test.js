@@ -4,6 +4,8 @@ import assert from "node:assert/strict";
 import {
   addDays,
   assignOverlapTracks,
+  clockHourFromPoint,
+  clockHourToTimeRange,
   eventDurationMinutes,
   getVisibleEventSegments,
   timeToMinutes,
@@ -39,6 +41,33 @@ class MemoryStorage {
 test("1分単位の時刻を分へ変換できる", () => {
   assert.equal(timeToMinutes("07:13"), 433);
   assert.equal(timeToMinutes("08:27"), 507);
+});
+
+test("円上のタップ位置を0時から時計回りの1時間枠へ変換できる", () => {
+  const pointAtClockTime = (decimalHour) => {
+    const angle = (decimalHour / 24) * Math.PI * 2 - Math.PI / 2;
+    return {
+      x: 300 + Math.cos(angle) * 150,
+      y: 300 + Math.sin(angle) * 150,
+    };
+  };
+
+  for (const [decimalHour, expectedHour, expectedRange] of [
+    [0.5, 0, { startTime: "00:00", endTime: "01:00" }],
+    [6.5, 6, { startTime: "06:00", endTime: "07:00" }],
+    [12.5, 12, { startTime: "12:00", endTime: "13:00" }],
+    [19 + 37 / 60, 19, { startTime: "19:00", endTime: "20:00" }],
+    [23.5, 23, { startTime: "23:00", endTime: "00:00" }],
+  ]) {
+    const point = pointAtClockTime(decimalHour);
+    assert.equal(clockHourFromPoint(point.x, point.y), expectedHour);
+    assert.deepEqual(clockHourToTimeRange(expectedHour), expectedRange);
+  }
+});
+
+test("中央部分と円の外側は時間枠として扱わない", () => {
+  assert.equal(clockHourFromPoint(300, 300), null);
+  assert.equal(clockHourFromPoint(300, 40), null);
 });
 
 test("同じ開始・終了時刻は登録できない", () => {
