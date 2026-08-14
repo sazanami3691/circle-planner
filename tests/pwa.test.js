@@ -228,6 +228,8 @@ test("通信診断は一時表示だけを使い、通常通知とLocalStorage�
   assert.doesNotMatch(app, /localStorage\.(?:clear|removeItem)\s*\(/);
   assert.match(ntfy, /async publish\(serverUrl, payload\)/);
   assert.match(ntfy, /body:\s*JSON\.stringify\(payload\)/);
+  assert.match(ntfy, /globalThis\.fetch\.bind\(globalThis\)/);
+  assert.doesNotMatch(ntfy, /requestNoCorsGet|mode:\s*["']no-cors["']/);
 });
 
 test("メニューはアクセシブルなドロワーとして定義される", async () => {

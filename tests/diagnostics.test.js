@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { NtfyClient } from "../js/ntfy.js";
 import {
   createNtfyHealthUrl,
   formatCommunicationDiagnostics,
@@ -11,7 +10,7 @@ import {
 
 function diagnosticOptions(scope, overrides = {}) {
   return {
-    release: "20260815-7",
+    release: "20260815-8",
     sameOriginUrl: "https://app.example/circle-planner/release.json",
     serverUrl: "https://ntfy.sh",
     scope,
@@ -63,11 +62,11 @@ test("診断は4種類のfetch receiverと同一オリジン経路を個別に�
   assert.equal(receivers[1], scope);
   assert.equal(receivers[2], scope);
   assert.equal(receivers[3], undefined);
-  assert.ok(receivers[4] instanceof NtfyClient);
+  assert.equal(receivers[4], scope);
   assert.ok(report.tests.every((item) => item.result === "SUCCESS"));
   assert.equal(report.tests[0].responseType, "basic");
   assert.equal(report.tests[1].responseOrigin, "https://ntfy.sh");
-  assert.equal(report.release, "20260815-7");
+  assert.equal(report.release, "20260815-8");
   assert.equal(report.standalone, true);
   assert.equal(report.serviceWorkerControlled, true);
 });
@@ -182,7 +181,7 @@ test("通知送信診断は1経路だけを使いtopicと完全URLを診断結�
     timeoutMs: 5,
   });
   const report = {
-    release: "20260815-7",
+    release: "20260815-8",
     displayMode: "standalone",
     standalone: true,
     online: true,
@@ -201,9 +200,15 @@ test("通知送信診断は1経路だけを使いtopicと完全URLを診断結�
   assert.doesNotMatch(text, /Circle\+Planner%E9%80%9A%E4%BF%A1%E8%A8%BA%E6%96%AD/);
 });
 
-test("通知送信診断のopaque結果はHTTP未確認として記録する", async () => {
+test("通知送信診断はCORSのHTTP成功を確認済みとして記録する", async () => {
   const scope = {
-    fetch: async () => ({ type: "opaque", status: 0, ok: false }),
+    fetch: async (url) => ({
+      type: "cors",
+      status: 200,
+      statusText: "OK",
+      ok: true,
+      url,
+    }),
   };
   const result = await runNtfyPublishDiagnostic({
     serverUrl: "https://ntfy.sh",
@@ -213,6 +218,9 @@ test("通知送信診断のopaque結果はHTTP未確認として記録する", a
   });
 
   assert.equal(result.result, "SUCCESS");
-  assert.equal(result.responseType, "opaque");
-  assert.equal(result.verification, "UNVERIFIED");
+  assert.equal(result.method, "GET");
+  assert.equal(result.mode, "cors");
+  assert.equal(result.status, 200);
+  assert.equal(result.responseType, "cors");
+  assert.equal(result.verification, "HTTP_VERIFIED");
 });

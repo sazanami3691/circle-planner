@@ -68,7 +68,6 @@ function createFetchMock() {
     failGet: false,
     postStatus: 200,
     getStatus: 200,
-    noCorsResponse: { type: "opaque", status: 0, ok: false },
   };
   const fetchImpl = async (url, init) => {
     const method = init.method || "GET";
@@ -76,7 +75,6 @@ function createFetchMock() {
     if ((method === "POST" && behavior.failPost) || (method === "GET" && behavior.failGet)) {
       throw new TypeError("Failed to fetch");
     }
-    if (init.mode === "no-cors") return behavior.noCorsResponse;
     const status = method === "POST" ? behavior.postStatus : behavior.getStatus;
     return { type: "cors", ok: status >= 200 && status < 300, status };
   };
@@ -94,6 +92,52 @@ function createTestClient(mock, options = {}) {
 function fixedNow() {
   return new Date(2026, 7, 15, 18, 0, 0, 0);
 }
+
+test("デフォルトfetchはglobalThisへbindし、注入fetchはそのまま保持する", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  function windowLikeFetch(url, init) {
+    if (this !== globalThis) {
+      throw new TypeError("Can only call Window.fetch on instances of Window");
+    }
+    calls.push({ url, init });
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      type: "cors",
+      url,
+    });
+  }
+
+  const wrongReceiver = { fetchImpl: windowLikeFetch };
+  assert.throws(
+    () => wrongReceiver.fetchImpl("https://ntfy.sh/v1/health", {}),
+    /Can only call Window\.fetch on instances of Window/,
+  );
+  await assert.doesNotReject(() => windowLikeFetch.bind(globalThis)("https://ntfy.sh/v1/health", {}));
+
+  globalThis.fetch = windowLikeFetch;
+  try {
+    const defaultClient = new NtfyClient({ diagnosticLogger: () => {} });
+    const response = await defaultClient.publishTest(
+      "https://ntfy.sh",
+      createTestNotificationPayload("binding-test-topic"),
+    );
+    assert.equal(response.status, 200);
+    assert.equal(calls.at(-1).init.mode, "cors");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  const injectedFetch = async () => ({ ok: true, status: 200, type: "cors" });
+  const injectedClient = new NtfyClient({ fetchImpl: injectedFetch });
+  assert.equal(injectedClient.fetchImpl, injectedFetch);
+  await assert.doesNotReject(() => injectedClient.publishTest(
+    "https://ntfy.sh",
+    createTestNotificationPayload("mock-test-topic"),
+  ));
+});
 
 test("ntfy OFFまたはtopic未設定では予定同期の通信を行わない", async () => {
   for (const settings of [
@@ -149,24 +193,19 @@ test("テスト通知はtopic・日本語title・日本語messageをURLエンコ
   assert.equal(requestUrl.searchParams.get("message"), "Circle Plannerからのテスト通知です");
   assert.match(mock.calls[0].url, /title=Circle\+Planner/);
   assert.match(mock.calls[0].url, /message=Circle\+Planner%E3%81%8B%E3%82%89/);
-  assert.equal(mock.calls[0].init.mode, "no-cors");
-  assert.equal(Object.hasOwn(mock.calls[0].init, "method"), false);
+  assert.equal(mock.calls[0].init.method, "GET");
+  assert.equal(mock.calls[0].init.mode, "cors");
   assert.equal(Object.hasOwn(mock.calls[0].init, "headers"), false);
   assert.equal(Object.hasOwn(mock.calls[0].init, "cache"), false);
   assert.equal(Object.hasOwn(mock.calls[0].init, "credentials"), false);
   assert.equal(Object.hasOwn(mock.calls[0].init, "body"), false);
   assert.equal(mock.calls[0].payload, null);
-  assert.deepEqual(result, {
-    outcome: "dispatched-unverified",
-    httpVerified: false,
-    method: "GET",
-    mode: "no-cors",
-    responseType: "opaque",
-  });
+  assert.equal(result.status, 200);
+  assert.equal(result.type, "cors");
   assert.deepEqual(mock.diagnostics, []);
 });
 
-test("no-cors GETテスト通知はfetch rejectとtimeoutを安全に診断する", async () => {
+test("CORS GETテスト通知はfetch rejectとtimeoutを安全に診断する", async () => {
   const sensitivePayload = createTestNotificationPayload("secret-topic");
 
   const networkMock = createFetchMock();
@@ -178,7 +217,7 @@ test("no-cors GETテスト通知はfetch rejectとtimeoutを安全に診断す�
   assert.deepEqual(networkMock.diagnostics, [{
     kind: "network",
     method: "GET",
-    mode: "no-cors",
+    mode: "cors",
     status: null,
     responseType: null,
     timedOut: false,
@@ -203,7 +242,7 @@ test("no-cors GETテスト通知はfetch rejectとtimeoutを安全に診断す�
   assert.deepEqual(timeoutDiagnostics, [{
     kind: "timeout",
     method: "GET",
-    mode: "no-cors",
+    mode: "cors",
     status: null,
     responseType: null,
     timedOut: true,
@@ -216,6 +255,26 @@ test("no-cors GETテスト通知はfetch rejectとtimeoutを安全に診断す�
   assert.doesNotMatch(serializedDiagnostics, /secret-topic|Circle Plannerからのテスト通知です/);
   assert.match(getNtfyTestFailureMessage({ kind: "http-client" }), /サーバーURLとトピック名/);
   assert.match(getNtfyTestFailureMessage({ kind: "timeout" }), /時間内/);
+});
+
+test("CORS GETテスト通知はHTTP 4xx・5xxを失敗として検出する", async () => {
+  const payload = createTestNotificationPayload("test-topic");
+  for (const [status, kind] of [[400, "http-client"], [503, "http-server"]]) {
+    const mock = createFetchMock();
+    mock.behavior.getStatus = status;
+    await assert.rejects(
+      createTestClient(mock).publishTest("https://ntfy.sh", payload),
+      (error) => error instanceof NtfyRequestError && error.kind === kind && error.status === status,
+    );
+    assert.deepEqual(mock.diagnostics, [{
+      kind,
+      method: "GET",
+      mode: "cors",
+      status,
+      responseType: "cors",
+      timedOut: false,
+    }]);
+  }
 });
 
 test("通常requestはJSON POSTの4xx・5xxを引き続き失敗として検出する", async () => {
