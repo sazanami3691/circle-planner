@@ -13,6 +13,13 @@ test("HTMLはローカル資産だけを参照し、主要操作を備える", a
   const html = await read("index.html");
   assert.doesNotMatch(html, /(?:src|href)=["']https?:\/\//i);
   for (const id of [
+    "menu-toggle",
+    "menu-layer",
+    "app-drawer",
+    "menu-overlay",
+    "menu-close",
+    "update-app",
+    "update-status",
     "schedule-svg",
     "open-add-dialog",
     "previous-day",
@@ -56,6 +63,38 @@ test("Service Workerのアプリシェル参照先がすべて存在する", asy
   for (const relativePath of paths) {
     await assert.doesNotReject(read(relativePath, null), `Missing app shell file: ${relativePath}`);
   }
+});
+
+test("手動更新は再取得完了後にキャッシュを切り替え、保存データには触れない", async () => {
+  const [worker, app] = await Promise.all([read("service-worker.js"), read("js/app.js")]);
+
+  assert.match(worker, /REFRESH_APP_SHELL/);
+  assert.match(worker, /cache:\s*["']reload["']/);
+  assert.match(worker, /ACTIVE_CACHE_KEY/);
+  assert.match(worker, /event\.ports\[0\]/);
+  assert.match(worker, /stagedCacheName/);
+  assert.match(app, /updateViaCache:\s*["']none["']/);
+  assert.match(app, /MessageChannel/);
+  assert.doesNotMatch(app, /localStorage\.(?:clear|removeItem)\s*\(/);
+  assert.doesNotMatch(worker, /localStorage/);
+});
+
+test("メニューはアクセシブルなドロワーとして定義される", async () => {
+  const [html, css, app] = await Promise.all([
+    read("index.html"),
+    read("styles.css"),
+    read("js/app.js"),
+  ]);
+
+  assert.match(html, /aria-controls=["']app-drawer["']/);
+  assert.match(html, /aria-expanded=["']false["']/);
+  assert.match(html, /aria-modal=["']true["']/);
+  assert.match(html, /aria-live=["']polite["']/);
+  assert.match(css, /\.menu-action[\s\S]*?min-height:\s*60px/);
+  assert.match(css, /\.app-drawer[\s\S]*?safe-area-inset/);
+  assert.match(css, /prefers-reduced-motion/);
+  assert.match(app, /event\.key === ["']Escape["']/);
+  assert.match(app, /\.inert\s*=/);
 });
 
 test("レスポンシブUIと44px操作領域の基準がCSSにある", async () => {

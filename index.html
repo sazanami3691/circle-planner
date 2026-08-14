@@ -21,18 +21,75 @@
     <a class="skip-link" href="#main-content">メイン内容へ移動</a>
 
     <header class="app-header">
-      <a class="brand" href="./" aria-label="Circle Planner ホーム">
-        <span class="brand__mark" aria-hidden="true"></span>
-        <span>
-          <strong>Circle Planner</strong>
-          <small>24-hour day view</small>
-        </span>
-      </a>
+      <div class="app-header__start">
+        <button
+          class="menu-button"
+          id="menu-toggle"
+          type="button"
+          aria-label="メニューを開く"
+          aria-controls="app-drawer"
+          aria-expanded="false"
+        >
+          <span class="menu-button__lines" aria-hidden="true">
+            <i></i><i></i><i></i>
+          </span>
+        </button>
+        <a class="brand" href="./" aria-label="Circle Planner ホーム">
+          <span class="brand__mark" aria-hidden="true"></span>
+          <span>
+            <strong>Circle Planner</strong>
+            <small>24-hour day view</small>
+          </span>
+        </a>
+      </div>
       <button class="button button--primary" id="open-add-dialog" type="button">
         <span aria-hidden="true">＋</span>
         予定を追加
       </button>
     </header>
+
+    <div class="menu-layer" id="menu-layer" aria-hidden="true">
+      <button
+        class="menu-overlay"
+        id="menu-overlay"
+        type="button"
+        tabindex="-1"
+        aria-label="メニューを閉じる"
+      ></button>
+      <aside
+        class="app-drawer"
+        id="app-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="menu-title"
+        inert
+      >
+        <div class="drawer-heading">
+          <div>
+            <p class="eyebrow">MENU</p>
+            <h2 id="menu-title">アプリメニュー</h2>
+          </div>
+          <button class="icon-button" id="menu-close" type="button" aria-label="メニューを閉じる">
+            ×
+          </button>
+        </div>
+
+        <nav class="menu-navigation" aria-label="アプリメニュー">
+          <button class="menu-action" id="update-app" type="button">
+            <span class="menu-action__icon" aria-hidden="true"></span>
+            <span>
+              <strong>アプリを更新</strong>
+              <small>公開済みの最新版を取得</small>
+            </span>
+          </button>
+        </nav>
+
+        <p class="update-status" id="update-status" role="status" aria-live="polite">
+          オンライン時に最新版を確認できます。
+        </p>
+        <p class="drawer-note">予定や設定など、端末内の保存データは更新時も維持されます。</p>
+      </aside>
+    </div>
 
     <main id="main-content" class="app-main">
       <section class="date-toolbar" aria-labelledby="selected-date">

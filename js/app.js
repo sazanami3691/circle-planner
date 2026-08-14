@@ -28,6 +28,13 @@ const CATEGORY_COLORS = new Map([
 ]);
 
 const elements = {
+  menuToggle: document.querySelector("#menu-toggle"),
+  menuLayer: document.querySelector("#menu-layer"),
+  menuDrawer: document.querySelector("#app-drawer"),
+  menuOverlay: document.querySelector("#menu-overlay"),
+  menuClose: document.querySelector("#menu-close"),
+  updateApp: document.querySelector("#update-app"),
+  updateStatus: document.querySelector("#update-status"),
   addButton: document.querySelector("#open-add-dialog"),
   emptyAddButton: document.querySelector("#empty-add-button"),
   previousDay: document.querySelector("#previous-day"),
@@ -67,6 +74,9 @@ let events = repository.load();
 let selectedDate = localDateString(new Date());
 let editingId = null;
 let toastTimer = 0;
+let menuOpen = false;
+let focusBeforeMenu = null;
+let updateInProgress = false;
 
 function localDateString(date) {
   return [
@@ -511,6 +521,157 @@ function showToast(message) {
   }, 3200);
 }
 
+function drawerFocusableElements() {
+  return [...elements.menuDrawer.querySelectorAll("button:not(:disabled), a[href], input, select")]
+    .filter((element) => !element.hidden && element.getAttribute("aria-hidden") !== "true");
+}
+
+function openMenu() {
+  if (menuOpen) return;
+  menuOpen = true;
+  focusBeforeMenu = document.activeElement;
+  elements.menuLayer.classList.add("is-open");
+  elements.menuLayer.setAttribute("aria-hidden", "false");
+  elements.menuDrawer.inert = false;
+  elements.menuToggle.setAttribute("aria-expanded", "true");
+  elements.menuToggle.setAttribute("aria-label", "メニューを閉じる");
+  document.body.classList.add("menu-open");
+  elements.menuClose.focus();
+}
+
+function closeMenu({ restoreFocus = true } = {}) {
+  if (!menuOpen) return;
+  menuOpen = false;
+  elements.menuLayer.classList.remove("is-open");
+  elements.menuLayer.setAttribute("aria-hidden", "true");
+  elements.menuDrawer.inert = true;
+  elements.menuToggle.setAttribute("aria-expanded", "false");
+  elements.menuToggle.setAttribute("aria-label", "メニューを開く");
+  document.body.classList.remove("menu-open");
+
+  if (restoreFocus) {
+    const focusTarget = focusBeforeMenu?.isConnected ? focusBeforeMenu : elements.menuToggle;
+    focusTarget.focus();
+  }
+  focusBeforeMenu = null;
+}
+
+function trapMenuFocus(event) {
+  if (!menuOpen || event.key !== "Tab") return;
+  const focusable = drawerFocusableElements();
+  if (!focusable.length) {
+    event.preventDefault();
+    return;
+  }
+
+  const first = focusable[0];
+  const last = focusable.at(-1);
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
+function setUpdateStatus(message, state = "idle") {
+  elements.updateStatus.textContent = message;
+  elements.updateStatus.dataset.state = state;
+}
+
+function waitForWorkerActivation(worker, timeoutMs = 20_000) {
+  if (worker.state === "activated") return Promise.resolve();
+
+  return new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      worker.removeEventListener("statechange", handleStateChange);
+      reject(new Error("Service Worker activation timed out"));
+    }, timeoutMs);
+
+    function handleStateChange() {
+      if (worker.state === "activated") {
+        window.clearTimeout(timeout);
+        worker.removeEventListener("statechange", handleStateChange);
+        resolve();
+      } else if (worker.state === "redundant") {
+        window.clearTimeout(timeout);
+        worker.removeEventListener("statechange", handleStateChange);
+        reject(new Error("Service Worker became redundant"));
+      }
+    }
+
+    worker.addEventListener("statechange", handleStateChange);
+  });
+}
+
+function requestAppShellRefresh(worker, timeoutMs = 30_000) {
+  return new Promise((resolve, reject) => {
+    const messageChannel = new MessageChannel();
+    const timeout = window.setTimeout(() => {
+      messageChannel.port1.close();
+      reject(new Error("App shell refresh timed out"));
+    }, timeoutMs);
+
+    messageChannel.port1.onmessage = (event) => {
+      window.clearTimeout(timeout);
+      messageChannel.port1.close();
+      if (event.data?.ok) {
+        resolve(event.data);
+      } else {
+        reject(new Error("App shell refresh failed"));
+      }
+    };
+
+    worker.postMessage({ type: "REFRESH_APP_SHELL" }, [messageChannel.port2]);
+  });
+}
+
+async function updateApplication() {
+  if (updateInProgress) return;
+  updateInProgress = true;
+  elements.updateApp.disabled = true;
+  elements.updateApp.classList.add("is-updating");
+  elements.updateApp.setAttribute("aria-busy", "true");
+  setUpdateStatus("最新版を確認しています…");
+
+  try {
+    if (!navigator.onLine || !("serviceWorker" in navigator)) {
+      throw new Error("Service Worker update is unavailable");
+    }
+
+    let registration = await navigator.serviceWorker.getRegistration();
+    if (!registration) {
+      registration = await navigator.serviceWorker.register("./service-worker.js", {
+        updateViaCache: "none",
+      });
+    }
+
+    await registration.update();
+    const pendingWorker = registration.installing || registration.waiting;
+    const workerWasUpdated = Boolean(pendingWorker);
+    if (pendingWorker) await waitForWorkerActivation(pendingWorker);
+
+    const activeWorker = registration.active || navigator.serviceWorker.controller;
+    if (!activeWorker) throw new Error("No active Service Worker");
+
+    const result = await requestAppShellRefresh(activeWorker);
+    const wasUpdated = workerWasUpdated || result.updated;
+    setUpdateStatus(
+      wasUpdated ? "アプリを更新しました。再読み込みします…" : "最新版です。再読み込みします…",
+      "success",
+    );
+    await new Promise((resolve) => window.setTimeout(resolve, 900));
+    window.location.reload();
+  } catch {
+    setUpdateStatus("更新を確認できませんでした。通信状態を確認してください。", "error");
+    elements.updateApp.disabled = false;
+    elements.updateApp.classList.remove("is-updating");
+    elements.updateApp.removeAttribute("aria-busy");
+    updateInProgress = false;
+  }
+}
+
 function saveEvent(event) {
   try {
     repository.upsert(event);
@@ -543,6 +704,19 @@ elements.form.addEventListener("submit", (submitEvent) => {
     return;
   }
   saveEvent(event);
+});
+
+elements.menuToggle.addEventListener("click", () => (menuOpen ? closeMenu() : openMenu()));
+elements.menuOverlay.addEventListener("click", () => closeMenu());
+elements.menuClose.addEventListener("click", () => closeMenu());
+elements.updateApp.addEventListener("click", updateApplication);
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && menuOpen) {
+    event.preventDefault();
+    closeMenu();
+    return;
+  }
+  trapMenuFocus(event);
 });
 
 elements.addButton.addEventListener("click", () => openNewDialog());
@@ -628,7 +802,7 @@ updateConnectionStatus();
 if ("serviceWorker" in navigator && window.location.protocol.startsWith("http")) {
   window.addEventListener("load", async () => {
     try {
-      await navigator.serviceWorker.register("./service-worker.js");
+      await navigator.serviceWorker.register("./service-worker.js", { updateViaCache: "none" });
     } catch {
       elements.connectionStatus.textContent = "オフライン準備に失敗しました";
     }
