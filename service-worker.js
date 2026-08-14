@@ -1,21 +1,24 @@
 const CACHE_PREFIX = "circle-planner-shell-";
-const CACHE_NAME = "circle-planner-shell-v3-20260814";
+const RELEASE_VERSION = "20260815-2";
+const CACHE_NAME = `${CACHE_PREFIX}release-${RELEASE_VERSION}`;
 const CACHE_META_NAME = "circle-planner-cache-meta-v1";
 const ACTIVE_CACHE_KEY = new URL("./__active-shell-cache__", self.registration.scope).href;
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./styles.css",
-  "./js/app.js",
-  "./js/core.js",
-  "./js/storage.js",
-  "./manifest.webmanifest",
-  "./icons/app-icon.svg",
-  "./icons/apple-touch-icon.png",
-  "./icons/icon-192.png",
-  "./icons/icon-512.png",
-  "./icons/icon-maskable-512.png"
+  `./releases/${RELEASE_VERSION}/styles.css`,
+  `./releases/${RELEASE_VERSION}/pwa-bootstrap.js`,
+  `./releases/${RELEASE_VERSION}/app.js`,
+  `./releases/${RELEASE_VERSION}/core.js`,
+  `./releases/${RELEASE_VERSION}/storage.js`,
+  `./manifest.${RELEASE_VERSION}.webmanifest`,
+  `./releases/${RELEASE_VERSION}/app-icon.svg`,
+  `./releases/${RELEASE_VERSION}/apple-touch-icon.png`,
+  `./releases/${RELEASE_VERSION}/icon-192.png`,
+  `./releases/${RELEASE_VERSION}/icon-512.png`,
+  `./releases/${RELEASE_VERSION}/icon-maskable-512.png`
 ];
+const APP_SHELL_URLS = new Set(APP_SHELL.map((path) => new URL(path, self.registration.scope).href));
 
 let refreshPromise = null;
 
@@ -25,9 +28,8 @@ function canonicalRequest(path) {
   });
 }
 
-function freshRequest(path, token) {
+function freshRequest(path) {
   const url = new URL(path, self.registration.scope);
-  url.searchParams.set("circlePlannerUpdate", token);
   return new Request(url.href, {
     cache: "reload",
     credentials: "same-origin"
@@ -67,12 +69,11 @@ async function setActiveCacheName(cacheName) {
 async function populateShellCache(targetCacheName, comparisonCacheName = null) {
   const targetCache = await caches.open(targetCacheName);
   const comparisonCache = comparisonCacheName ? await caches.open(comparisonCacheName) : null;
-  const updateToken = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   let changed = !comparisonCache;
 
   for (const path of APP_SHELL) {
     const canonical = canonicalRequest(path);
-    const response = await fetch(freshRequest(path, updateToken));
+    const response = await fetch(freshRequest(path));
     if (!response.ok) {
       throw new Error(`App shell request failed: ${path}`);
     }
@@ -112,7 +113,7 @@ async function refreshAppShell() {
 
   refreshPromise = (async () => {
     const activeCacheName = await getActiveCacheName();
-    const stagedCacheName = `${CACHE_PREFIX}manual-${Date.now()}`;
+    const stagedCacheName = `${CACHE_PREFIX}release-${RELEASE_VERSION}-manual-${Date.now()}`;
 
     try {
       const updated = await populateShellCache(stagedCacheName, activeCacheName);
@@ -154,7 +155,12 @@ async function cacheFirst(request) {
   if (cached) return cached;
 
   const response = await fetch(request);
-  if (response && response.status === 200 && response.type === "basic") {
+  if (
+    response &&
+    response.status === 200 &&
+    response.type === "basic" &&
+    APP_SHELL_URLS.has(request.url)
+  ) {
     await cacheResponseInActiveCache(request, response.clone());
   }
   return response;
