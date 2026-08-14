@@ -5,14 +5,17 @@ import {
   NTFY_MAX_DELAY_MS,
   NTFY_MIN_DELAY_MS,
   NtfyClient,
+  NtfyRequestError,
   NtfySyncManager,
   classifyNotificationTiming,
   createEventNotificationPayload,
+  createNtfyJsonPublishUrl,
   createSequenceId,
   createTestNotificationPayload,
   defaultNtfyIntegration,
   eventStartDate,
   eventStartUnixTimestamp,
+  getNtfyTestFailureMessage,
 } from "../js/ntfy.js";
 import { ScheduleRepository, STORAGE_KEY } from "../js/storage.js";
 
@@ -59,15 +62,25 @@ function configuredSettings(overrides = {}) {
 
 function createFetchMock() {
   const calls = [];
-  const behavior = { failPost: false, failGet: false };
+  const diagnostics = [];
+  const behavior = { failPost: false, failGet: false, postStatus: 200, getStatus: 200 };
   const fetchImpl = async (url, init) => {
     calls.push({ url, init, payload: init.body ? JSON.parse(init.body) : null });
     if ((init.method === "POST" && behavior.failPost) || (init.method === "GET" && behavior.failGet)) {
-      throw new Error("offline");
+      throw new TypeError("Failed to fetch");
     }
-    return { ok: true };
+    const status = init.method === "POST" ? behavior.postStatus : behavior.getStatus;
+    return { ok: status >= 200 && status < 300, status };
   };
-  return { calls, behavior, fetchImpl };
+  return { calls, behavior, diagnostics, fetchImpl };
+}
+
+function createTestClient(mock, options = {}) {
+  return new NtfyClient({
+    fetchImpl: mock.fetchImpl,
+    diagnosticLogger: (diagnostic) => mock.diagnostics.push(diagnostic),
+    ...options,
+  });
 }
 
 function fixedNow() {
@@ -85,7 +98,7 @@ test("ntfy OFFまたはtopic未設定では予定同期の通信を行わない"
     const mock = createFetchMock();
     const manager = new NtfySyncManager({
       repository,
-      client: new NtfyClient({ fetchImpl: mock.fetchImpl }),
+      client: createTestClient(mock),
       now: fixedNow,
     });
 
@@ -103,12 +116,64 @@ test("テスト通知は指定topicへ日本語payloadを即時送信する", as
   });
 
   const mock = createFetchMock();
-  const client = new NtfyClient({ fetchImpl: mock.fetchImpl });
+  const client = createTestClient(mock);
   await client.publish("https://ntfy.sh", payload);
-  assert.equal(mock.calls[0].url, "https://ntfy.sh");
+  assert.equal(createNtfyJsonPublishUrl("https://ntfy.sh/"), "https://ntfy.sh/");
+  assert.equal(mock.calls[0].url, "https://ntfy.sh/");
   assert.equal(mock.calls[0].init.method, "POST");
-  assert.equal(mock.calls[0].init.headers["Content-Type"], "text/plain;charset=UTF-8");
+  assert.equal(Object.hasOwn(mock.calls[0].init, "headers"), false);
+  assert.equal(Object.hasOwn(mock.calls[0].init, "cache"), false);
+  assert.equal(Object.hasOwn(mock.calls[0].init, "credentials"), false);
+  assert.equal(mock.calls[0].init.body, JSON.stringify(payload));
   assert.deepEqual(mock.calls[0].payload, payload);
+});
+
+test("ntfy通信エラーは秘密情報を診断へ含めずnetwork・4xx・5xx・timeoutを区別する", async () => {
+  const sensitivePayload = createTestNotificationPayload("secret-topic");
+
+  const networkMock = createFetchMock();
+  networkMock.behavior.failPost = true;
+  await assert.rejects(
+    createTestClient(networkMock).publish("https://ntfy.sh", sensitivePayload),
+    (error) => error instanceof NtfyRequestError && error.kind === "network" && error.status === null,
+  );
+  assert.deepEqual(networkMock.diagnostics, [{ kind: "network", method: "POST", status: null }]);
+
+  for (const [status, kind] of [[400, "http-client"], [503, "http-server"]]) {
+    const httpMock = createFetchMock();
+    httpMock.behavior.postStatus = status;
+    await assert.rejects(
+      createTestClient(httpMock).publish("https://ntfy.sh", sensitivePayload),
+      (error) => error instanceof NtfyRequestError && error.kind === kind && error.status === status,
+    );
+    assert.deepEqual(httpMock.diagnostics, [{ kind, method: "POST", status }]);
+  }
+
+  const timeoutDiagnostics = [];
+  const timeoutClient = new NtfyClient({
+    timeoutMs: 5,
+    diagnosticLogger: (diagnostic) => timeoutDiagnostics.push(diagnostic),
+    fetchImpl: (_url, init) => new Promise((_resolve, reject) => {
+      init.signal.addEventListener("abort", () => {
+        const error = new Error("aborted");
+        error.name = "AbortError";
+        reject(error);
+      }, { once: true });
+    }),
+  });
+  await assert.rejects(
+    timeoutClient.publish("https://ntfy.sh", sensitivePayload),
+    (error) => error instanceof NtfyRequestError && error.kind === "timeout",
+  );
+  assert.deepEqual(timeoutDiagnostics, [{ kind: "timeout", method: "POST", status: null }]);
+
+  const serializedDiagnostics = JSON.stringify([
+    ...networkMock.diagnostics,
+    ...timeoutDiagnostics,
+  ]);
+  assert.doesNotMatch(serializedDiagnostics, /secret-topic|Circle Plannerからのテスト通知です/);
+  assert.match(getNtfyTestFailureMessage({ kind: "http-client" }), /サーバーURLとトピック名/);
+  assert.match(getNtfyTestFailureMessage({ kind: "timeout" }), /時間内/);
 });
 
 test("端末ローカル時刻をUnix timestampへ変換し1分単位と0時またぎを保つ", () => {
@@ -155,7 +220,7 @@ test("同一予定の再同期は増殖せず編集は同じSequence IDで置換
   const mock = createFetchMock();
   const manager = new NtfySyncManager({
     repository,
-    client: new NtfyClient({ fetchImpl: mock.fetchImpl }),
+    client: createTestClient(mock),
     now: fixedNow,
   });
 
@@ -170,6 +235,8 @@ test("同一予定の再同期は増殖せず編集は同じSequence IDで置換
   assert.equal(publishes[0].payload.delay, String(eventStartUnixTimestamp(baseEvent)));
   assert.equal(publishes[0].payload.sequence_id, publishes[1].payload.sequence_id);
   assert.equal(publishes[1].payload.message, "ゲーム制作・編集\n20:00〜20:13");
+  assert.ok(publishes.every((call) => call.url === "https://ntfy.sh/"));
+  assert.ok(publishes.every((call) => !Object.hasOwn(call.init, "headers")));
 });
 
 test("予約済み予定を3日より先へ編集すると旧予約をキャンセルして待機へ戻す", async () => {
@@ -179,7 +246,7 @@ test("予約済み予定を3日より先へ編集すると旧予約をキャン�
   const mock = createFetchMock();
   const manager = new NtfySyncManager({
     repository,
-    client: new NtfyClient({ fetchImpl: mock.fetchImpl }),
+    client: createTestClient(mock),
     now: fixedNow,
   });
   await manager.syncAll();
@@ -200,7 +267,7 @@ test("3日より先は通信せず予約可能期間待ちへ保存する", asyn
   const mock = createFetchMock();
   const manager = new NtfySyncManager({
     repository,
-    client: new NtfyClient({ fetchImpl: mock.fetchImpl }),
+    client: createTestClient(mock),
     now: fixedNow,
   });
 
@@ -219,7 +286,7 @@ test("最低遅延未満の未来予定はdelayなしで即時送信し、過去
   const mock = createFetchMock();
   const manager = new NtfySyncManager({
     repository,
-    client: new NtfyClient({ fetchImpl: mock.fetchImpl }),
+    client: createTestClient(mock),
     now,
   });
 
@@ -237,7 +304,7 @@ test("予定削除はGETキャンセルし、失敗時は再試行情報を保�
   const mock = createFetchMock();
   const manager = new NtfySyncManager({
     repository,
-    client: new NtfyClient({ fetchImpl: mock.fetchImpl }),
+    client: createTestClient(mock),
     now: fixedNow,
   });
   await manager.syncAll();
@@ -259,7 +326,7 @@ test("通知OFFは既存予約をキャンセルし予定を維持する", async
   const mock = createFetchMock();
   const manager = new NtfySyncManager({
     repository,
-    client: new NtfyClient({ fetchImpl: mock.fetchImpl }),
+    client: createTestClient(mock),
     now: fixedNow,
   });
   await manager.syncAll();
@@ -277,7 +344,7 @@ test("topic変更は旧予約をキャンセルして新topicへ同じSequence I
   const mock = createFetchMock();
   const manager = new NtfySyncManager({
     repository,
-    client: new NtfyClient({ fetchImpl: mock.fetchImpl }),
+    client: createTestClient(mock),
     now: fixedNow,
   });
   await manager.syncAll();
@@ -298,7 +365,7 @@ test("オフラインの通知失敗でも予定と外部連携用データを�
   mock.behavior.failPost = true;
   const manager = new NtfySyncManager({
     repository,
-    client: new NtfyClient({ fetchImpl: mock.fetchImpl }),
+    client: createTestClient(mock),
     now: fixedNow,
   });
 
