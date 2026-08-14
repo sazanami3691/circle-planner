@@ -38,6 +38,10 @@ test("HTMLはローカル資産だけを参照し、主要操作を備える", a
     "ntfy-topic",
     "test-ntfy",
     "sync-ntfy",
+    "run-ntfy-diagnostics",
+    "ntfy-diagnostics-output",
+    "copy-ntfy-diagnostics",
+    "run-ntfy-publish-diagnostic",
   ]) {
     assert.match(html, new RegExp(`id=["']${id}["']`));
   }
@@ -76,6 +80,7 @@ test("Service Workerのアプリシェル参照先がすべて存在する", asy
   assert.ok(paths.includes(`./releases/${release}/pwa-bootstrap.js`));
   assert.ok(paths.includes(`./releases/${release}/app.js`));
   assert.ok(paths.includes(`./releases/${release}/ntfy.js`));
+  assert.ok(paths.includes(`./releases/${release}/diagnostics.js`));
   assert.ok(paths.includes(`./manifest.${release}.webmanifest`));
 
   for (const relativePath of paths) {
@@ -114,6 +119,7 @@ test("同一リリースIDがHTML・モジュール・manifest・Service Worker�
   assert.match(app, /from ["']\.\/core\.js["']/);
   assert.match(app, /from ["']\.\/storage\.js["']/);
   assert.match(app, /from ["']\.\/ntfy\.js["']/);
+  assert.match(app, /from ["']\.\/diagnostics\.js["']/);
   assert.match(bootstrap, /document\.documentElement\.dataset\.appRelease/);
   assert.match(bootstrap, /register\(["']\.\/service-worker\.js["']/);
   assert.match(worker, new RegExp(`const RELEASE_VERSION = ["']${release}["']`));
@@ -128,6 +134,7 @@ test("リリース用アセットは正本と一致する", async () => {
     ["js/core.js", "core.js"],
     ["js/storage.js", "storage.js"],
     ["js/ntfy.js", "ntfy.js"],
+    ["js/diagnostics.js", "diagnostics.js"],
     ["icons/app-icon.svg", "app-icon.svg"],
     ["icons/apple-touch-icon.png", "apple-touch-icon.png"],
     ["icons/icon-192.png", "icon-192.png"],
@@ -145,7 +152,7 @@ test("旧cache-firstキャッシュは新リリースのCSSとJavaScriptに一�
   const release = releaseFromHtml(html);
   const origin = "https://example.test/circle-planner/";
   const legacyUrls = new Set(
-    ["styles.css", "js/app.js", "js/core.js", "js/storage.js", "js/ntfy.js"].map(
+    ["styles.css", "js/app.js", "js/core.js", "js/storage.js", "js/ntfy.js", "js/diagnostics.js"].map(
       (path) => new URL(path, origin).href,
     ),
   );
@@ -155,9 +162,10 @@ test("旧cache-firstキャッシュは新リリースのCSSとJavaScriptに一�
     `releases/${release}/core.js`,
     `releases/${release}/storage.js`,
     `releases/${release}/ntfy.js`,
+    `releases/${release}/diagnostics.js`,
   ];
 
-  assert.equal(newReleasePaths.length, 5);
+  assert.equal(newReleasePaths.length, 6);
   const newReleaseMarkup = html + (await read(`releases/${release}/app.js`));
   for (const path of newReleasePaths) {
     const fileName = path.split("/").at(-1).replace(".", "\\.");
@@ -197,6 +205,29 @@ test("ntfy通信はService Workerのアプリシェルキャッシュ対象外�
   assert.match(worker, /requestUrl\.origin !== self\.location\.origin\) return/);
   assert.doesNotMatch(worker, /ntfy\.sh/);
   assert.match(app, /テスト通知を送信しました。ntfyアプリに届いたか確認してください。/);
+});
+
+test("通信診断は一時表示だけを使い、通常通知とLocalStorageを変更しない", async () => {
+  const [html, app, diagnostics, ntfy] = await Promise.all([
+    read("index.html"),
+    read("js/app.js"),
+    read("js/diagnostics.js"),
+    read("js/ntfy.js"),
+  ]);
+
+  assert.match(html, /通信診断を実行/);
+  assert.match(html, /診断結果をコピー/);
+  assert.match(html, /通知送信も診断する/);
+  assert.match(app, /runCommunicationDiagnostics/);
+  assert.match(app, /runNtfyPublishDiagnostic/);
+  assert.match(diagnostics, /new URL\(["']v1\/health["']/);
+  assert.match(diagnostics, /scope\.fetch\.call\(scope/);
+  assert.match(diagnostics, /const extractedFetch = scope\.fetch/);
+  assert.match(diagnostics, /clientStyle\.fetchImpl/);
+  assert.doesNotMatch(diagnostics, /localStorage|STORAGE_KEY|repository/);
+  assert.doesNotMatch(app, /localStorage\.(?:clear|removeItem)\s*\(/);
+  assert.match(ntfy, /async publish\(serverUrl, payload\)/);
+  assert.match(ntfy, /body:\s*JSON\.stringify\(payload\)/);
 });
 
 test("メニューはアクセシブルなドロワーとして定義される", async () => {

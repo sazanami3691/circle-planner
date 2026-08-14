@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build:release": "node tools/build-release-assets.mjs",
-    "check": "node --check js/core.js && node --check js/storage.js && node --check js/ntfy.js && node --check js/pwa-bootstrap.js && node --check js/app.js && node --check service-worker.js && node --check tools/build-release-assets.mjs && node --check tools/serve.mjs",
+    "check": "node --check js/core.js && node --check js/storage.js && node --check js/ntfy.js && node --check js/diagnostics.js && node --check js/pwa-bootstrap.js && node --check js/app.js && node --check service-worker.js && node --check tools/build-release-assets.mjs && node --check tools/serve.mjs",
     "test": "node --test",
     "serve": "node tools/serve.mjs"
   }
