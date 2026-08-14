@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   addDays,
   assignOverlapTracks,
+  clockHourToAvailableTimeRange,
   clockHourFromPoint,
   clockHourToTimeRange,
   eventDurationMinutes,
@@ -68,6 +69,47 @@ test("円上のタップ位置を0時から時計回りの1時間枠へ変換で
 test("中央部分と円の外側は時間枠として扱わない", () => {
   assert.equal(clockHourFromPoint(300, 300), null);
   assert.equal(clockHourFromPoint(300, 40), null);
+});
+
+test("円タップは時間枠内で最も遅い予定終了時刻から開始する", () => {
+  const segment = (startMinute, endMinute) => ({ startMinute, endMinute });
+  for (const [label, hour, segments, expected] of [
+    ["予定なし", 6, [], { startTime: "06:00", endTime: "07:00" }],
+    ["1件", 6, [segment(360, 375)], { startTime: "06:15", endTime: "07:00" }],
+    [
+      "連続",
+      6,
+      [segment(360, 375), segment(375, 390)],
+      { startTime: "06:30", endTime: "07:00" },
+    ],
+    [
+      "複数",
+      6,
+      [segment(360, 375), segment(390, 405)],
+      { startTime: "06:45", endTime: "07:00" },
+    ],
+    ["前の時間から継続", 6, [segment(330, 375)], { startTime: "06:15", endTime: "07:00" }],
+    ["時間枠を通過", 6, [segment(330, 435)], { startTime: "06:00", endTime: "07:00" }],
+    ["23時台", 23, [segment(1380, 1395)], { startTime: "23:15", endTime: "00:00" }],
+    ["枠全体", 6, [segment(360, 420)], { startTime: "06:00", endTime: "07:00" }],
+    ["枠末尾まで", 6, [segment(390, 420)], { startTime: "06:00", endTime: "07:00" }],
+  ]) {
+    assert.deepEqual(clockHourToAvailableTimeRange(hour, segments), expected, label);
+  }
+});
+
+test("前日から続く予定の終了時刻を当日0時台の開始候補にする", () => {
+  const overnight = {
+    ...baseEvent,
+    date: "2026-08-12",
+    startTime: "23:30",
+    endTime: "00:15",
+  };
+  const segments = getVisibleEventSegments([overnight], "2026-08-13");
+  assert.deepEqual(clockHourToAvailableTimeRange(0, segments), {
+    startTime: "00:15",
+    endTime: "01:00",
+  });
 });
 
 test("同じ開始・終了時刻は登録できない", () => {

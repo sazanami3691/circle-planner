@@ -261,3 +261,12 @@ test("レスポンシブUIと44px操作領域の基準がCSSにある", async ()
   assert.match(css, /overflow-x:\s*hidden/);
   assert.match(css, /safe-area-inset/);
 });
+
+test("円タップだけが表示予定を使った初期時刻を適用する", async () => {
+  const app = await read("js/app.js");
+  assert.match(app, /function handleScheduleTap[\s\S]*?clockHourToAvailableTimeRange\(hour, visibleSegments\)/);
+  assert.match(app, /getVisibleEventSegments\(events, selectedDate\)/);
+  assert.match(app, /elements\.addButton\.addEventListener\([\s\S]*?openNewDialog\(\)/);
+  assert.match(app, /elements\.emptyAddButton\.addEventListener\([\s\S]*?openNewDialog\(\)/);
+  assert.match(app, /function openEditDialog\(id\)/);
+});
