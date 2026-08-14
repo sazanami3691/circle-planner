@@ -1,5 +1,5 @@
 const CACHE_PREFIX = "circle-planner-shell-";
-const RELEASE_VERSION = "20260815-5";
+const RELEASE_VERSION = "20260815-6";
 const CACHE_NAME = `${CACHE_PREFIX}release-${RELEASE_VERSION}`;
 const CACHE_META_NAME = "circle-planner-cache-meta-v1";
 const ACTIVE_CACHE_KEY = new URL("./__active-shell-cache__", self.registration.scope).href;

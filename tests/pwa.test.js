@@ -189,10 +189,14 @@ test("手動更新は再取得完了後にキャッシュを切り替え、保�
 });
 
 test("ntfy通信はService Workerのアプリシェルキャッシュ対象外である", async () => {
-  const worker = await read("service-worker.js");
+  const [worker, app] = await Promise.all([
+    read("service-worker.js"),
+    read("js/app.js"),
+  ]);
   assert.match(worker, /request\.method !== ["']GET["']\) return/);
   assert.match(worker, /requestUrl\.origin !== self\.location\.origin\) return/);
   assert.doesNotMatch(worker, /ntfy\.sh/);
+  assert.match(app, /テスト通知を送信しました。ntfyアプリに届いたか確認してください。/);
 });
 
 test("メニューはアクセシブルなドロワーとして定義される", async () => {
