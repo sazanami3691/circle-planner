@@ -2,14 +2,18 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  EVENT_LABEL_MIN_FONT_SIZE,
   addDays,
   assignOverlapTracks,
   clockHourToAvailableTimeRange,
   clockHourFromPoint,
   clockHourToTimeRange,
   eventDurationMinutes,
+  getScheduleEventLabelLayout,
   getVisibleEventSegments,
+  layoutExternalEventLabels,
   timeToMinutes,
+  truncateLabel,
   validateEventDraft,
 } from "../js/core.js";
 import { ScheduleRepository, STORAGE_KEY } from "../js/storage.js";
@@ -168,6 +172,73 @@ test("重複する予定は別トラックへ配置される", () => {
       { trackIndex: 0, trackCount: 2 },
     ],
   );
+});
+
+test("予定時間に応じて円内タイトルの文字サイズを段階的に調整する", () => {
+  const layout = (duration, title = "朝食") =>
+    getScheduleEventLabelLayout({
+      title,
+      startMinute: 360,
+      endMinute: 360 + duration,
+      innerRadius: 83,
+      outerRadius: 218,
+    });
+
+  assert.deepEqual([layout(60).placement, layout(60).fontSize], ["inside", 14]);
+  assert.deepEqual([layout(30).placement, layout(30).fontSize], ["inside", 12]);
+  assert.deepEqual(
+    [layout(15).placement, layout(15).fontSize],
+    ["inside", EVENT_LABEL_MIN_FONT_SIZE],
+  );
+});
+
+test("短すぎる予定や細い重複トラックは円外タイトルへ切り替える", () => {
+  const shortLayout = getScheduleEventLabelLayout({
+    title: "短い予定",
+    startMinute: 360,
+    endMinute: 370,
+    innerRadius: 83,
+    outerRadius: 218,
+  });
+  const thinTrackLayout = getScheduleEventLabelLayout({
+    title: "重複予定",
+    startMinute: 360,
+    endMinute: 420,
+    innerRadius: 197,
+    outerRadius: 218,
+  });
+  const leftLayout = getScheduleEventLabelLayout({
+    title: "左側の短い予定",
+    startMinute: 1080,
+    endMinute: 1090,
+    innerRadius: 83,
+    outerRadius: 218,
+  });
+
+  assert.equal(shortLayout.placement, "outside");
+  assert.equal(shortLayout.side, "right");
+  assert.equal(thinTrackLayout.placement, "outside");
+  assert.equal(leftLayout.placement, "outside");
+  assert.equal(leftLayout.side, "left");
+});
+
+test("円外タイトルは左右を分け、近接ラベルと時刻数字を避けて配置する", () => {
+  const layouts = layoutExternalEventLabels([
+    { side: "right", idealY: 298, id: "right-1" },
+    { side: "right", idealY: 304, id: "right-2" },
+    { side: "left", idealY: 300, id: "left-1" },
+  ]);
+  const [rightFirst, rightSecond, left] = layouts;
+
+  assert.ok(rightSecond.y - rightFirst.y >= 18);
+  assert.ok(Math.abs(rightFirst.y - 300) >= 18);
+  assert.ok(Math.abs(rightSecond.y - 300) >= 18);
+  assert.ok(Math.abs(left.y - 300) >= 18);
+});
+
+test("長い予定タイトルは表示可能文字数で省略する", () => {
+  assert.equal(truncateLabel("朝のゲーム制作", 5), "朝のゲー…");
+  assert.equal(truncateLabel("朝食", 5), "朝食");
 });
 
 test("予定の追加・編集・削除をローカル保存できる", () => {

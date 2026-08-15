@@ -47,6 +47,20 @@ test("HTMLはローカル資産だけを参照し、主要操作を備える", a
   }
 });
 
+test("円形予定タイトルは横書きの円内・円外表示を備え、タップを妨げない", async () => {
+  const [app, styles] = await Promise.all([read("js/app.js"), read("styles.css")]);
+
+  assert.match(app, /getScheduleEventLabelLayout/);
+  assert.match(app, /layoutExternalEventLabels/);
+  assert.match(app, /event-label--inside/);
+  assert.match(app, /event-label--outside/);
+  assert.match(app, /event-label-leader/);
+  assert.match(app, /"text-anchor": isRight \? "start" : "end"/);
+  assert.doesNotMatch(app, /event-label[^\n]*rotate|rotate[^\n]*event-label/);
+  assert.match(styles, /\.event-label-leader[\s\S]*?pointer-events:\s*none/);
+  assert.match(styles, /\.event-label[\s\S]*?pointer-events:\s*none/);
+});
+
 test("manifestの必須情報とアイコンが揃っている", async () => {
   const html = await read("index.html");
   const release = releaseFromHtml(html);
