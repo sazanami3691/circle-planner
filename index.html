@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ja" data-app-release="20260815-10">
+<html lang="ja" data-app-release="20260826-1">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -11,10 +11,10 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Circle Planner" />
-    <link rel="manifest" href="manifest.20260815-10.webmanifest" />
-    <link rel="icon" href="releases/20260815-10/app-icon.svg" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="releases/20260815-10/apple-touch-icon.png" />
-    <link rel="stylesheet" href="releases/20260815-10/styles.css" />
+    <link rel="manifest" href="manifest.20260826-1.webmanifest" />
+    <link rel="icon" href="releases/20260826-1/app-icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="releases/20260826-1/apple-touch-icon.png" />
+    <link rel="stylesheet" href="releases/20260826-1/styles.css" />
     <title>Circle Planner</title>
   </head>
   <body>
@@ -168,6 +168,61 @@
       <span id="connection-status" role="status">接続状態を確認中</span>
       <span>予定はこの端末内に保存されます</span>
     </footer>
+
+    <dialog
+      id="duration-dialog"
+      class="event-dialog duration-dialog"
+      aria-labelledby="duration-dialog-title"
+    >
+      <section class="duration-picker">
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow">QUICK DURATION</p>
+            <h2 id="duration-dialog-title">予定時間を決める</h2>
+          </div>
+          <button
+            class="icon-button"
+            id="close-duration-dialog"
+            type="button"
+            aria-label="時間選択を閉じる"
+          >
+            ×
+          </button>
+        </div>
+
+        <div class="duration-summary" aria-live="polite">
+          <div class="duration-summary__range">
+            <span>
+              <small>開始</small>
+              <strong id="duration-start-time">--:--</strong>
+            </span>
+            <span class="duration-summary__arrow" aria-hidden="true">→</span>
+            <span>
+              <small>終了</small>
+              <strong id="duration-end-time">--:--</strong>
+            </span>
+          </div>
+          <p class="duration-summary__total" id="duration-total">0分</p>
+        </div>
+
+        <div class="duration-add-actions" aria-label="予定時間を加算">
+          <button class="button button--quiet" type="button" data-duration-add="15">+15分</button>
+          <button class="button button--quiet" type="button" data-duration-add="30">+30分</button>
+          <button class="button button--quiet" type="button" data-duration-add="60">+1時間</button>
+        </div>
+
+        <p class="duration-limit-status" id="duration-limit-status" role="status" hidden></p>
+
+        <div class="duration-picker__actions">
+          <button class="button button--quiet" id="clear-duration" type="button" disabled>
+            クリア
+          </button>
+          <button class="button button--primary" id="create-with-duration" type="button" disabled>
+            予定を作成
+          </button>
+        </div>
+      </section>
+    </dialog>
 
     <dialog id="event-dialog" class="event-dialog" aria-labelledby="dialog-title">
       <form id="event-form" class="event-form" novalidate>
@@ -373,7 +428,7 @@
     <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
     <noscript>Circle Plannerを使用するにはJavaScriptを有効にしてください。</noscript>
-    <script src="releases/20260815-10/pwa-bootstrap.js" defer></script>
-    <script type="module" src="releases/20260815-10/app.js"></script>
+    <script src="releases/20260826-1/pwa-bootstrap.js" defer></script>
+    <script type="module" src="releases/20260826-1/app.js"></script>
   </body>
 </html>

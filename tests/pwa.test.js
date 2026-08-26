@@ -26,6 +26,14 @@ test("HTMLはローカル資産だけを参照し、主要操作を備える", a
     "update-app",
     "update-status",
     "schedule-svg",
+    "duration-dialog",
+    "close-duration-dialog",
+    "duration-start-time",
+    "duration-end-time",
+    "duration-total",
+    "duration-limit-status",
+    "clear-duration",
+    "create-with-duration",
     "open-add-dialog",
     "previous-day",
     "today",
@@ -276,11 +284,28 @@ test("レスポンシブUIと44px操作領域の基準がCSSにある", async ()
   assert.match(css, /safe-area-inset/);
 });
 
-test("円タップだけが表示予定を使った初期時刻を適用する", async () => {
-  const app = await read("js/app.js");
+test("円タップだけが時間加算パネルを経て初期時刻を適用する", async () => {
+  const [html, css, app] = await Promise.all([
+    read("index.html"),
+    read("styles.css"),
+    read("js/app.js"),
+  ]);
   assert.match(app, /function handleScheduleTap[\s\S]*?clockHourToAvailableTimeRange\(hour, visibleSegments\)/);
+  assert.match(app, /function handleScheduleTap[\s\S]*?openDurationPicker\(initialTimeRange\.startTime\)/);
   assert.match(app, /getVisibleEventSegments\(events, selectedDate\)/);
+  assert.match(app, /function createEventFromDurationPicker\([\s\S]*?openNewDialog\(timeRange\)/);
+  assert.match(app, /elements\.createWithDuration\.disabled = plannedDurationMinutes === 0/);
+  assert.match(app, /function clearDurationPicker\(\)[\s\S]*?plannedDurationMinutes = 0/);
   assert.match(app, /elements\.addButton\.addEventListener\([\s\S]*?openNewDialog\(\)/);
   assert.match(app, /elements\.emptyAddButton\.addEventListener\([\s\S]*?openNewDialog\(\)/);
   assert.match(app, /function openEditDialog\(id\)/);
+  assert.match(html, /data-duration-add=["']15["']/);
+  assert.match(html, /data-duration-add=["']30["']/);
+  assert.match(html, /data-duration-add=["']60["']/);
+  assert.match(html, /id=["']create-with-duration["'][^>]*disabled/);
+  assert.match(css, /\.duration-add-actions[\s\S]*?grid-template-columns:\s*repeat\(3/);
+  assert.match(css, /\.duration-add-actions \.button[\s\S]*?min-height:\s*56px/);
+  assert.match(app, /event\.key === ["']Escape["'][\s\S]*?elements\.durationDialog\.open/);
+  assert.match(app, /elements\.closeDurationDialog\.addEventListener\(["']click["'], closeDurationPicker\)/);
+  assert.match(app, /event\.target === elements\.durationDialog[\s\S]*?closeDurationPicker\(\)/);
 });

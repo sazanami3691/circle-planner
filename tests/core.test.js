@@ -3,8 +3,11 @@ import assert from "node:assert/strict";
 
 import {
   EVENT_LABEL_MIN_FONT_SIZE,
+  MAX_EVENT_DURATION_MINUTES,
+  addPlannedDurationMinutes,
   addDays,
   assignOverlapTracks,
+  calculatePlannedTimeRange,
   clockHourToAvailableTimeRange,
   clockHourFromPoint,
   clockHourToTimeRange,
@@ -100,6 +103,63 @@ test("円タップは時間枠内で最も遅い予定終了時刻から開始�
   ]) {
     assert.deepEqual(clockHourToAvailableTimeRange(hour, segments), expected, label);
   }
+});
+
+test("円タップ後の時間加算から開始・終了時刻を計算できる", () => {
+  assert.deepEqual(calculatePlannedTimeRange("07:00", 0), {
+    startTime: "07:00",
+    endTime: null,
+    durationMinutes: 0,
+  });
+  assert.deepEqual(calculatePlannedTimeRange("07:00", 15), {
+    startTime: "07:00",
+    endTime: "07:15",
+    durationMinutes: 15,
+  });
+  const addAll = (amounts) =>
+    amounts.reduce((total, amount) => addPlannedDurationMinutes(total, amount), 0);
+  assert.equal(addAll([15, 15, 15]), 45);
+  assert.equal(addAll([30, 15]), 45);
+  assert.equal(addAll([60, 30]), 90);
+  for (const [durationMinutes, endTime] of [
+    [30, "07:30"],
+    [45, "07:45"],
+    [60, "08:00"],
+    [90, "08:30"],
+  ]) {
+    assert.deepEqual(calculatePlannedTimeRange("07:00", durationMinutes), {
+      startTime: "07:00",
+      endTime,
+      durationMinutes,
+    });
+  }
+});
+
+test("スマート開始時刻から加算した予定範囲を作れる", () => {
+  const range = clockHourToAvailableTimeRange(7, [
+    { startMinute: 420, endMinute: 435 },
+    { startMinute: 435, endMinute: 450 },
+  ]);
+
+  assert.equal(range.startTime, "07:30");
+  assert.deepEqual(calculatePlannedTimeRange(range.startTime, 30), {
+    startTime: "07:30",
+    endTime: "08:00",
+    durationMinutes: 30,
+  });
+});
+
+test("時間加算は日付をまたぎ、23時間45分を上限にする", () => {
+  assert.equal(calculatePlannedTimeRange("23:00", 60).endTime, "00:00");
+  assert.equal(calculatePlannedTimeRange("23:30", 60).endTime, "00:30");
+  assert.equal(
+    addPlannedDurationMinutes(MAX_EVENT_DURATION_MINUTES - 15, 60),
+    MAX_EVENT_DURATION_MINUTES,
+  );
+  assert.throws(
+    () => calculatePlannedTimeRange("07:00", MAX_EVENT_DURATION_MINUTES + 15),
+    /Invalid planned duration/,
+  );
 });
 
 test("前日から続く予定の終了時刻を当日0時台の開始候補にする", () => {
